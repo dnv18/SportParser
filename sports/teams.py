@@ -3,16 +3,20 @@ import asyncio
 import sports.settings as TSD
 from sports.leagues import allLeagues
 from sports.request import make_request, send_data_to_api
+from sports.sports import sports_for_thesportdb
 from sports.utils import change_sport_name, change_country_name
 
 
 async def transfer_teams(session):
     try:
         leagues = await allLeagues(session)
+        sports = await sports_for_thesportdb(session)
+        list_sports = [sport['name'] for sport in sports['sports']]
         for league in leagues['leagues']:
-            teams_for_api = await reformat_teams(session, league['idLeague'])
-            if teams_for_api:
-                await send_data_to_api(session, 'teams', teams_for_api)
+            if league['strSport'] in list_sports:
+                teams_for_api = await reformat_teams(session, league['idLeague'])
+                if teams_for_api:
+                    await send_data_to_api(session, 'teams', teams_for_api)
     except Exception as e:
         # print(f"Teams don`t sent. Exception: {e}")
         await asyncio.sleep(5)

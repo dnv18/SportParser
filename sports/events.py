@@ -11,11 +11,12 @@ async def transfer_events(session):
         sports = await get_data_from_api(session, 'sports')
         leagues_ids = await get_leagues_ids_by_sports(session, sports)
         seasons = await get_data_from_api(session, 'seasons')
-        for season in seasons['seasons']:
-            for league_id in leagues_ids:
-                events_for_api = await reformat_events(session, league_id, season['name'])
-                if events_for_api['events']:
-                    await send_data_to_api(session, 'events', events_for_api)
+        if sports['sports'] and leagues_ids and seasons['seasons']:
+            for season in seasons['seasons']:
+                for league_id in leagues_ids:
+                    events_for_api = await reformat_events(session, league_id, season['name'])
+                    if events_for_api:
+                        await send_data_to_api(session, 'events', events_for_api)
     except Exception as e:
         # print(f"Events don`t sent. Exception: {e}")
         await asyncio.sleep(5)
@@ -31,6 +32,24 @@ async def reformat_events(session, league_id, season_name):
         return events_for_api
     else:
         return None
+
+
+async def transfer_livescore(session, sport):
+    try:
+        livescore_events = await eventLivescore(session, sport)
+        if livescore_events['events']:
+            events_for_api = {'events': []}
+            for livescore_event in livescore_events['events']:
+                event_for_api = await eventInfo(session, livescore_event['idEvent'])
+                if event_for_api['events']:
+                    res_event = await generate_event(event_for_api['events'][0], session,
+                                                     await check_season(event_for_api['events'][0]['strSeason']))
+                    events_for_api['events'].append(res_event)
+            if events_for_api['events']:
+                await send_data_to_api(session, 'events', events_for_api)
+    except Exception as e:
+        print(f"Events don`t sent. Exception: {e}")
+        await asyncio.sleep(5)
 
 
 async def generate_event(event, session, season_name):
@@ -122,24 +141,6 @@ async def generate_event(event, session, season_name):
         "event_tvs": events_tvs_for_api
     }
     return res_event
-
-
-async def transfer_livescore(session, sports):
-    try:
-        for sport in sports['sports']:
-            livescore_events = await eventLivescore(session, sport['name'])
-            if livescore_events['events']:
-                events_for_api = {'events': []}
-                for livescore_event in livescore_events['events']:
-                    event_for_api = await eventInfo(session, livescore_event['idEvent'])
-                    res_event = await generate_event(event_for_api['events'][0], session,
-                                                     await check_season(event_for_api['events'][0]['strSeason']))
-                    events_for_api['events'].append(res_event)
-                if events_for_api['events']:
-                    await send_data_to_api(session, 'events', events_for_api)
-    except Exception as e:
-        # print(f"Events don`t sent. Exception: {e}")
-        await asyncio.sleep(5)
 
 
 async def eventLivescore(session, sport: str):

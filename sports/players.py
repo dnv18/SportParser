@@ -1,10 +1,9 @@
 from __future__ import absolute_import
-
 import asyncio
-
 import sports.settings as TSD
 from sports.leagues import allLeagues
 from sports.request import make_request, send_data_to_api
+from sports.sports import sports_for_thesportdb
 from sports.teams import leagueTeams
 from sports.utils import change_country_name, change_sport_name, check_season
 
@@ -13,13 +12,16 @@ async def transfer_players(session):
     try:
         leagues = await allLeagues(session)
         if leagues['leagues'] is not None:
+            sports = await sports_for_thesportdb(session)
+            list_sports = [sport['name'] for sport in sports['sports']]
             for league in leagues['leagues']:
-                teams_in_league = await leagueTeams(session, league['idLeague'])
-                if teams_in_league['teams'] is not None:
-                    for team in teams_in_league['teams']:
-                        players_for_api = await reformat_players(session, team['idTeam'])
-                        if players_for_api:
-                            await send_data_to_api(session, 'players', players_for_api)
+                if league['strSport'] in list_sports:
+                    teams_in_league = await leagueTeams(session, league['idLeague'])
+                    if teams_in_league['teams'] is not None:
+                        for team in teams_in_league['teams']:
+                            players_for_api = await reformat_players(session, team['idTeam'])
+                            if players_for_api:
+                                await send_data_to_api(session, 'players', players_for_api)
     except Exception as e:
         # print(f"Players don`t sent. Exception: {e}")
         await asyncio.sleep(5)

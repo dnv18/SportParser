@@ -32,6 +32,8 @@ async def allSports(session):
 
 async def sports_for_thesportdb(session):
     sports = await get_data_from_api(session, 'sports')
+    list_sports = []
     for sport in sports['sports']:
         sport['name'] = await sport_name_for_thesportdb(sport['name'])
-    return sports
+        list_sports.append(sport['name'])
+    return list_sports
