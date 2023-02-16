@@ -1,9 +1,10 @@
 from __future__ import absolute_import
 import asyncio
+import aiohttp
 import sports.settings as TSD
 from sports.leagues import get_leagues_ids_by_sports
 from sports.request import make_request, send_data_to_api, get_data_from_api
-from sports.utils import change_country_name, change_sport_name, sport_name_for_thesportdb, check_season
+from sports.utils import change_country_name, change_sport_name, check_season
 
 
 async def transfer_events(session):
@@ -34,21 +35,23 @@ async def reformat_events(session, league_id, season_name):
         return None
 
 
-async def transfer_livescore(session, sport):
+async def transfer_livescore(sport):
     try:
-        livescore_events = await eventLivescore(session, sport)
-        if livescore_events['events']:
-            events_for_api = {'events': []}
-            for livescore_event in livescore_events['events']:
-                event_for_api = await eventInfo(session, livescore_event['idEvent'])
-                if event_for_api['events']:
-                    res_event = await generate_event(event_for_api['events'][0], session,
-                                                     await check_season(event_for_api['events'][0]['strSeason']))
-                    events_for_api['events'].append(res_event)
-            if events_for_api['events']:
-                await send_data_to_api(session, 'events', events_for_api)
+        async with aiohttp.ClientSession() as session:
+            while True:
+                livescore_events = await eventLivescore(session, sport)
+                if livescore_events['events']:
+                    events_for_api = {'events': []}
+                    for livescore_event in livescore_events['events']:
+                        event_for_api = await eventInfo(session, livescore_event['idEvent'])
+                        if event_for_api['events']:
+                            res_event = await generate_event(event_for_api['events'][0], session,
+                                                             await check_season(event_for_api['events'][0]['strSeason']))
+                            events_for_api['events'].append(res_event)
+                    if events_for_api['events']:
+                        await send_data_to_api(session, 'events', events_for_api)
     except Exception as e:
-        print(f"Events don`t sent. Exception: {e}")
+        # print(f"Events don`t sent. Exception: {e}")
         await asyncio.sleep(5)
 
 

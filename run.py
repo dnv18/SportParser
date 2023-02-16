@@ -2,6 +2,7 @@ import asyncio
 from datetime import datetime
 import aiohttp
 import aioschedule
+import aiomultiprocess
 from sports.countries import transfer_countries
 from sports.events import transfer_events, transfer_livescore
 from sports.leagues import transfer_leagues
@@ -23,30 +24,39 @@ async def main():
                 await transfer_players(session)
                 await transfer_events(session)
                 print(datetime.now() - b)
-                await run_aioschedule(session)
+                livescore_worker = aiomultiprocess.Worker(target=run_livescore)
+                aioschedule_worker = aiomultiprocess.Worker(target=run_aioschedule)
+                livescore_worker.start()
+                aioschedule_worker.start()
             case '2':
-                await run_aioschedule(session)
+                livescore_worker = aiomultiprocess.Worker(target=run_livescore)
+                aioschedule_worker = aiomultiprocess.Worker(target=run_aioschedule)
+                livescore_worker.start()
+                aioschedule_worker.start()
             case _:
                 print("Wrong choose")
 
 
-async def run_aioschedule(session):
-    aioschedule.every().day.do(lambda: transfer_countries(session))
-    aioschedule.every().day.do(lambda: transfer_sports(session))
-    aioschedule.every().day.do(lambda: transfer_leagues(session))
-    aioschedule.every().day.do(lambda: transfer_teams(session))
-    aioschedule.every().day.do(lambda: transfer_players(session))
-    aioschedule.every().day.do(lambda: transfer_events(session))
-    sports = await sports_for_thesportdb(session)
-    aioschedule.every(1).seconds.do(lambda: transfer_livescore(session, sports[0]))
-    aioschedule.every(15).seconds.do(lambda: transfer_livescore(session, sports[1]))
-    aioschedule.every(15).seconds.do(lambda: transfer_livescore(session, sports[2]))
-    aioschedule.every(1).seconds.do(lambda: transfer_livescore(session, sports[3]))
-    while True:
-        await aioschedule.run_pending()
+async def run_livescore():
+    async with aiohttp.ClientSession() as session:
+        sports = await sports_for_thesportdb(session)
+        async with aiomultiprocess.Pool() as pool:
+            await pool.map(transfer_livescore, sports)
+
+
+async def run_aioschedule():
+    async with aiohttp.ClientSession() as session:
+        aioschedule.every().day.do(lambda: transfer_countries(session))
+        aioschedule.every().day.do(lambda: transfer_sports(session))
+        aioschedule.every().day.do(lambda: transfer_leagues(session))
+        aioschedule.every().day.do(lambda: transfer_teams(session))
+        aioschedule.every().day.do(lambda: transfer_players(session))
+        aioschedule.every().day.do(lambda: transfer_events(session))
+        while True:
+            await aioschedule.run_pending()
 
 if __name__ == '__main__':
     try:
         asyncio.run(main())
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, AttributeError):
         print("Close application.")
