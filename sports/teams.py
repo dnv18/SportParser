@@ -1,7 +1,6 @@
 from __future__ import absolute_import
-import asyncio
 import sports.settings as TSD
-from sports.leagues import allLeagues
+from sports.leagues import allLeagues, leagueInfo
 from sports.request import make_request, send_data_to_api
 from sports.sports import sports_for_thesportdb
 from sports.utils import change_sport_name, change_country_name
@@ -9,64 +8,64 @@ from sports.utils import change_sport_name, change_country_name
 
 async def transfer_teams(session):
     try:
-        leagues = await allLeagues(session)
         sports = await sports_for_thesportdb(session)
-        list_sports = [sport['name'] for sport in sports['sports']]
-        for league in leagues['leagues']:
-            if league['strSport'] in list_sports:
-                teams_for_api = await reformat_teams(session, league['idLeague'])
-                if teams_for_api:
-                    await send_data_to_api(session, 'teams', teams_for_api)
+        leagues = await allLeagues(session)
+        if leagues['leagues'] and sports:
+            for league in leagues['leagues']:
+                if league['strSport'] in sports:
+                    teams_for_api = await reformat_teams(session, league['idLeague'])
+                    if teams_for_api:
+                        await send_data_to_api(session, 'teams', teams_for_api)
     except Exception as e:
-        # print(f"Teams don`t sent. Exception: {e}")
-        await asyncio.sleep(5)
+        print(f"[TRANSFER_TEAMS] Teams don`t sent. Exception: {e}")
 
 
 async def reformat_teams(session, id_league):
     teams_in_league = await leagueTeams(session, id_league)
-    if teams_in_league['teams'] is not None:
-        teams_for_api = {'teams': []}
+    league_info = await leagueInfo(session, id_league)
+    if teams_in_league['teams'] and league_info['leagues']:
+        teams_for_api = []
         for team in teams_in_league['teams']:
-            teams_for_api['teams'].append({
-                "country": await change_country_name(team['strCountry']),
-                "sport": await change_sport_name(team['strSport']),
-                "league": team['strLeague'],
-                "name": team['strTeam'],
-                "name_alt": team['strAlternate'],
-                "name_short": team['strTeamShort'],
-                "formed_year": team['intFormedYear'],
-                "gender": team['strGender'],
-                "division": team['strDivision'],
-                "manager": team['strManager'],
-                "keywords": team['strKeywords'],
-                "website": team['strWebsite'],
-                "facebook": team['strFacebook'],
-                "twitter": team['strTwitter'],
-                "instagram": team['strInstagram'],
-                "youtube": team['strYoutube'],
-                "rss": team['strRSS'],
-                "description_en": team['strDescriptionEN'],
-                "description_ru": team['strDescriptionRU'],
-                "logo_large": team['strTeamBadge'],
-                "logo_medium": team['strTeamBadge'] + '/preview' if team['strTeamBadge'] else None,
-                "logo_small": team['strTeamBadge'] + '/tiny' if team['strTeamBadge'] else None,
-                "stadium": [
-                    {
-                        "name": team['strStadium'],
-                        "capacity": team['intStadiumCapacity'],
-                        "location": team['strStadiumLocation'],
-                        "description": team['strStadiumDescription'],
-                        "thumb": team['strStadiumThumb']
-                    }
-                ]
-            })
+            try:
+                stadium = {
+                    "name": team['strStadium'],
+                    "capacity": team['intStadiumCapacity'],
+                    "location": team['strStadiumLocation'],
+                    "description": team['strStadiumDescription'],
+                    "thumb": team['strStadiumThumb']
+                }
+                teams_for_api.append({
+                    "country": await change_country_name(team['strCountry']),
+                    "sport": await change_sport_name(team['strSport']),
+                    "league": league_info['leagues'][0]['strLeague'],
+                    "name": team['strTeam'],
+                    "name_alt": team['strAlternate'],
+                    "name_short": team['strTeamShort'],
+                    "formed_year": team['intFormedYear'],
+                    "gender": team['strGender'],
+                    "division": team['strDivision'],
+                    "keywords": team['strKeywords'],
+                    "website": team['strWebsite'],
+                    "facebook": team['strFacebook'],
+                    "twitter": team['strTwitter'],
+                    "instagram": team['strInstagram'],
+                    "youtube": team['strYoutube'],
+                    "rss": team['strRSS'],
+                    "description_en": team['strDescriptionEN'],
+                    "description_ru": team['strDescriptionRU'],
+                    "logo_large": team['strTeamBadge'],
+                    "logo_medium": team['strTeamBadge'] + '/preview' if team['strTeamBadge'] else None,
+                    "logo_small": team['strTeamBadge'] + '/tiny' if team['strTeamBadge'] else None,
+                    "stadium": [stadium] if stadium['name'] else None
+                })
+            except Exception as e:
+                print(f"[REFORMAT_TEAMS] Exception: {e}, continue")
+                continue
         return teams_for_api
-    else:
-        return None
 
 
-async def leagueTeams(session, league_id: str):
-    return await make_request(session, TSD.LEAGUE_TEAMS, id=league_id)
+async def leagueTeams(session, id_league: str):
+    return await make_request(session, TSD.LEAGUE_TEAMS, id=id_league)
 
 
 async def teamInfo(session, team_id: str):

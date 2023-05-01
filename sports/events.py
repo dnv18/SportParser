@@ -1,5 +1,4 @@
 from __future__ import absolute_import
-import asyncio
 import aiohttp
 import sports.settings as TSD
 from sports.leagues import get_leagues_ids_by_sports
@@ -8,57 +7,62 @@ from sports.utils import change_country_name, change_sport_name, check_season
 
 
 async def transfer_events(session):
-    try:
-        sports = await get_data_from_api(session, 'sports')
-        leagues_ids = await get_leagues_ids_by_sports(session, sports)
-        seasons = await get_data_from_api(session, 'seasons')
-        if sports['sports'] and leagues_ids and seasons['seasons']:
-            for season in seasons['seasons']:
-                for league_id in leagues_ids:
+    sports = await get_data_from_api(session, 'sports')
+    leagues_ids = await get_leagues_ids_by_sports(session, sports)
+    seasons = await get_data_from_api(session, 'seasons')
+    if leagues_ids and seasons:
+        for season in seasons:
+            for league_id in leagues_ids:
+                try:
                     events_for_api = await reformat_events(session, league_id, season['name'])
                     if events_for_api:
                         await send_data_to_api(session, 'events', events_for_api)
-    except Exception as e:
-        # print(f"Events don`t sent. Exception: {e}")
-        await asyncio.sleep(5)
+                except Exception as e:
+                    print(f"[TRANSFER_EVENTS] Events don`t sent. Exception: {e}")
+                    continue
 
 
 async def reformat_events(session, league_id, season_name):
     events = await leagueSeasonEvents(session, league_id, season_name)
-    if events['events'] is not None:
-        events_for_api = {'events': []}
+    if events and events['events']:
+        events_for_api = []
         for event in events['events']:
-            res_event = await generate_event(event, session, season_name)
-            events_for_api['events'].append(res_event)
+            try:
+                res_event = await generate_event(event, session, season_name)
+                events_for_api.append(res_event)
+            except Exception as e:
+                print(f"[REFORMAT_EVENTS] Exception: {e}, continue")
+                continue
         return events_for_api
-    else:
-        return None
 
 
 async def transfer_livescore(sport):
-    try:
-        async with aiohttp.ClientSession() as session:
-            while True:
-                livescore_events = await eventLivescore(session, sport)
-                if livescore_events['events']:
-                    events_for_api = {'events': []}
-                    for livescore_event in livescore_events['events']:
-                        event_for_api = await eventInfo(session, livescore_event['idEvent'])
-                        if event_for_api['events']:
-                            res_event = await generate_event(event_for_api['events'][0], session,
-                                                             await check_season(event_for_api['events'][0]['strSeason']))
-                            events_for_api['events'].append(res_event)
-                    if events_for_api['events']:
-                        await send_data_to_api(session, 'events', events_for_api)
-    except Exception as e:
-        # print(f"Events don`t sent. Exception: {e}")
-        await asyncio.sleep(5)
+    while True:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=3600)) as session:
+            livescore_events = await eventLivescore(session, sport)
+            if livescore_events and livescore_events['events']:
+                events_for_api = []
+                for livescore_event in livescore_events['events']:
+                    event_info = await eventInfo(session, livescore_event['idEvent'])
+                    if event_info and event_info['events']:
+                        try:
+                            res = await generate_event(
+                                event_info['events'][0],
+                                session,
+                                await check_season(event_info['events'][0]['strSeason'])
+                            )
+                            events_for_api.append(res)
+                        except Exception as e:
+                            print(f"[TRANSFER_LIVESCORE] Exception: {e}, continue")
+                            continue
+                if events_for_api:
+                    await send_data_to_api(session, 'events', events_for_api)
 
 
 async def generate_event(event, session, season_name):
     lineups_for_api = []
     lineups = await eventLineup(session, event['idEvent'])
-    if lineups['lineup'] is not None:
+    if lineups and lineups['lineup']:
         for lineup in lineups['lineup']:
             lineups_for_api.append({
                 'team': lineup['strTeam'],
@@ -69,7 +73,7 @@ async def generate_event(event, session, season_name):
             })
     event_stats_for_api = []
     event_stats = await eventStatistics(session, event['idEvent'])
-    if event_stats['eventstats'] is not None:
+    if event_stats and event_stats['eventstats']:
         for event_stat in event_stats['eventstats']:
             event_stats_for_api.append({
                 "type": event_stat['strStat'],
@@ -78,7 +82,7 @@ async def generate_event(event, session, season_name):
             })
     timelines_for_api = []
     timelines = await eventTimeline(session, event['idEvent'])
-    if timelines['timeline'] is not None:
+    if timelines and timelines['timeline']:
         for timeline in timelines['timeline']:
             timelines_for_api.append({
                 "team": timeline['strTeam'],
@@ -92,12 +96,12 @@ async def generate_event(event, session, season_name):
             })
     events_tvs_for_api = []
     events_tvs = await eventTVByEvent(session, event['idEvent'])
-    if events_tvs['tvevent'] is not None:
+    if events_tvs and events_tvs['tvevent']:
         for event_tv in events_tvs['tvevent']:
             events_tvs_for_api.append({
                 "date": event_tv['dateEvent'],
                 "division": event_tv['intDivision'],
-                "timestamp": event_tv['strTimeStamp'] if event_tv['strTimeStamp'] is not None
+                "timestamp": event_tv['strTimeStamp'] if event_tv['strTimeStamp']
                 else event_tv['dateEvent'] + ' ' + event_tv['strTime'],
                 "channel": [
                     {

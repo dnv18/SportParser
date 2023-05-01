@@ -1,6 +1,14 @@
 import re
 
 
+async def check_response(data):
+    if data is not None:
+        if type(data) is dict:
+            if len(data.keys()) > 0:
+                return True
+    return False
+
+
 async def change_sport_name(str_sport):
     match str_sport:
         case 'Soccer':
@@ -60,3 +68,18 @@ async def check_season(season: str):
             return season_elements[0] + '-' + season_elements[1]
     else:
         return season_elements[0]
+
+
+# async def save_img_to_folder(sv_path, cur_img, title):
+#     async with aiohttp.ClientSession() as session:
+#         path = f'{config("PATH_RESOURCE")}/img/{sv_path}/'
+#         if not os.path.exists(path):
+#             os.makedirs(path)
+#         async with session.get(cur_img) as response:
+#             if response.status == 200:
+#                 file = await aiofiles.open(path + f'{title}.png', mode='wb')
+#                 await file.write(await response.read())
+#                 await file.close()
+#                 img = Image.open('/Users/nikitadenisov/Desktop/gitprojects_dnv/thesportdb_ver2/resource/test.png')
+#                 img.save('/Users/nikitadenisov/Desktop/gitprojects_dnv/thesportdb_ver2/resource/test.webp',
+#                          format='webp')
