@@ -22,7 +22,8 @@ async def send_request(session, url, params):
                 if response.content_type == 'application/json' and response.status == 200 \
                         and await check_response(await response.json()):
                     return await response.json()
-        except aiohttp.client.ServerDisconnectedError:
+        except (aiohttp.client.ServerDisconnectedError, aiohttp.client.ClientConnectionError,
+                aiohttp.client.ClientOSError):
             continue
 
 
